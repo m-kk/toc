@@ -1,0 +1,11 @@
+{
+    "id": "table-of-contents-generator",
+    "name": "Table of Contents Generator",
+    "version": "1.0.0",
+    "minAppVersion": "0.15.0",
+    "description": "Generate a table of contents for your notes",
+    "author": "Matt Kaili",
+    "authorUrl": "https://github.com/m-kk",
+    "isDesktopOnly": false,
+    "fundingUrl": "https://www.buymeacoffee.com/mkk"
+}

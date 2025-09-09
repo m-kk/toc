@@ -1,0 +1,85 @@
+/*
+Table of Contents Generator Plugin Styles
+
+Modern frontmatter-based TOC with no visible markers.
+All TOC visibility is now handled through frontmatter metadata.
+*/
+
+/* ===== TOC STYLING ===== */
+
+/* Enhanced TOC title styling */
+.markdown-preview-view h2,
+.markdown-reading-view h2 {
+    margin-top: 1.5em;
+    margin-bottom: 0.8em;
+}
+
+/* TOC list styling */
+.markdown-preview-view ul,
+.markdown-reading-view ul {
+    margin-left: 0;
+    padding-left: 1.2em;
+}
+
+/* TOC link styling */
+.markdown-preview-view .internal-link,
+.markdown-reading-view .internal-link {
+    text-decoration: none;
+    color: var(--link-color);
+    border-bottom: 1px solid transparent;
+    transition: border-bottom-color 0.2s ease;
+}
+
+.markdown-preview-view .internal-link:hover,
+.markdown-reading-view .internal-link:hover {
+    border-bottom-color: var(--link-color);
+}
+
+/* ===== MOBILE SUPPORT ===== */
+
+.is-mobile .markdown-preview-view ul,
+.is-mobile .markdown-reading-view ul {
+    padding-left: 1em;
+}
+
+/* ===== PRINT SUPPORT ===== */
+
+@media print {
+    .markdown-preview-view h2,
+    .markdown-reading-view h2 {
+        page-break-after: avoid;
+    }
+    
+    .markdown-preview-view ul,
+    .markdown-reading-view ul {
+        page-break-inside: avoid;
+    }
+}
+
+/* ===== ACCESSIBILITY ===== */
+
+@media (prefers-reduced-motion: reduce) {
+    .internal-link {
+        transition: none;
+    }
+}
+
+/* ===== THEME COMPATIBILITY ===== */
+
+/* Ensure compatibility with custom themes */
+.theme-dark h2,
+.theme-light h2 {
+    color: var(--text-normal);
+}
+
+.theme-dark .internal-link,
+.theme-light .internal-link {
+    color: var(--link-color, #7c3aed);
+}
+
+/* High contrast support */
+@media (prefers-contrast: high) {
+    .internal-link {
+        border-bottom: 2px solid var(--link-color);
+    }
+}
