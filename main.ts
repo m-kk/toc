@@ -24,11 +24,11 @@ const DEFAULT_MAX_DEPTH = 4;
 // Pre-compiled patterns for performance optimization
 const TOC_CONTENT_PATTERNS = [
     /^-\s+\[\[#.*\|.*\]\]$/,         // Obsidian-style links
-    /^  -\s+\[\[#.*\|.*\]\]$/,       // Indented Obsidian-style links  
+    /^ {2}-\s+\[\[#.*\|.*\]\]$/,     // Indented Obsidian-style links
     /^-\s+\[.*\]\(#.*\)$/,           // Markdown links
-    /^  -\s+\[.*\]\(#.*\)$/,         // Indented markdown links
+    /^ {2}-\s+\[.*\]\(#.*\)$/,       // Indented markdown links
     /^-\s+[^[].+$/,                  // Plain text TOC items
-    /^  -\s+[^[].+$/                 // Indented plain text
+    /^ {2}-\s+[^[].+$/               // Indented plain text
 ] as const;
 
 const FRONTMATTER_PATTERN = /^---\s*\n([\s\S]*?)\n---\s*\n/;
@@ -94,7 +94,7 @@ export default class TableOfContentsPlugin extends Plugin {
             name: 'Generate table of contents',
             editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
                 if (ctx instanceof MarkdownView) {
-                    this.generateTableOfContents(editor, ctx);
+                    void this.generateTableOfContents(editor, ctx);
                 }
             }
         });
@@ -112,7 +112,7 @@ export default class TableOfContentsPlugin extends Plugin {
         this.addRibbonIcon('list', 'Generate TOC', () => {
             const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
             if (activeView) {
-                this.generateTableOfContents(activeView.editor, activeView);
+                void this.generateTableOfContents(activeView.editor, activeView);
             }
         });
 
@@ -158,18 +158,18 @@ export default class TableOfContentsPlugin extends Plugin {
             
             const content = activeView.editor.getValue();
             const { frontmatter } = this.frontmatterManager.parseFrontmatter(content);
-            const tocMetadata = frontmatter[TOC_CONFIG.FRONTMATTER_KEY];
-            
-            console.log('=== TOC Debug Info ===');
-            console.log('File:', activeView.file.name);
-            console.log('TOC Metadata:', tocMetadata);
-            console.log('Has TOC:', !!tocMetadata);
-            
+            const tocMetadata = frontmatter[TOC_CONFIG.FRONTMATTER_KEY] as TOCMetadata | undefined;
+
+            console.debug('=== TOC Debug Info ===');
+            console.debug('File:', activeView.file.name);
+            console.debug('TOC Metadata:', tocMetadata);
+            console.debug('Has TOC:', !!tocMetadata);
+
             if (tocMetadata) {
-                console.log('Last Update:', tocMetadata.lastUpdate);
+                console.debug('Last Update:', tocMetadata.lastUpdate);
             }
-            
-            new Notice('TOC debug info logged to console');
+
+            new Notice('Table of contents debug info logged to console');
         } catch (error) {
             console.error('Error in debug method:', error);
             new Notice('Debug failed - check console for details');
@@ -204,10 +204,10 @@ export default class TableOfContentsPlugin extends Plugin {
         this.cleanupEventHandlers();
         
         this.registerEvent(
-            this.app.vault.on('modify', async (file) => {
+            this.app.vault.on('modify', (file) => {
                 const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
                 if (activeView && activeView.file === file) {
-                    await this.debouncedAutoUpdate(activeView.editor, activeView);
+                    this.debouncedAutoUpdate(activeView.editor, activeView);
                 }
             })
         );
@@ -221,25 +221,23 @@ export default class TableOfContentsPlugin extends Plugin {
         }
     }, DEBOUNCE_DELAY);
 
-    private debounce<T extends any[]>(func: (...args: T) => Promise<void>, wait: number) {
+    private debounce<T extends unknown[]>(func: (...args: T) => Promise<void>, wait: number) {
         return (...args: T) => {
             if (this.updateTimer) {
                 clearTimeout(this.updateTimer);
             }
-            
-            this.updateTimer = window.setTimeout(async () => {
-                try {
-                    await func(...args);
-                } catch (error) {
+
+            this.updateTimer = window.setTimeout(() => {
+                func(...args).catch(error => {
                     console.error('Error in debounced function:', error);
-                } finally {
+                }).finally(() => {
                     this.updateTimer = null;
-                }
+                });
             }, wait);
         };
     }
     
-    private throttle<T extends any[]>(func: (...args: T) => void, limit: number) {
+    private throttle<T extends unknown[]>(func: (...args: T) => void, limit: number) {
         let inThrottle: boolean;
         return (...args: T) => {
             if (!inThrottle) {
@@ -268,14 +266,14 @@ export default class TableOfContentsPlugin extends Plugin {
         // Prevent concurrent generation (race condition protection)
         if (this.isGenerating) {
             if (!isAutoUpdate) {
-                new Notice('TOC generation already in progress');
+                new Notice('Table of contents generation already in progress');
             }
             return;
         }
         
         if (!editor || !view || !view.file) {
             if (!isAutoUpdate) {
-                new Notice('Unable to generate TOC: Invalid editor or view');
+                new Notice('Unable to generate table of contents: invalid editor or view');
             }
             return;
         }
@@ -302,7 +300,7 @@ export default class TableOfContentsPlugin extends Plugin {
             }
 
             const toc = this.createTOC(filteredHeadings);
-            const newContent = await this.insertOrUpdateTOC(content, toc, file);
+            const newContent = this.insertOrUpdateTOC(content, toc, file);
             
             if (newContent !== content) {
                 if (isAutoUpdate) {
@@ -347,8 +345,8 @@ export default class TableOfContentsPlugin extends Plugin {
             /\(\[\^\]\*\)\+/,     // Dangerous ([^]*)+
             /\{\d{3,},\d{3,}\}/,  // Very large quantifier ranges
             /\(\.\*\?\)\+/,       // Dangerous (.*?)+
-            /\(\?\=.*\(\?\=/,     // Nested lookaheads
-            /\(\?\!.*\(\?\!/      // Nested lookbehinds
+            /\(\?=.*\(\?=/,       // Nested lookaheads
+            /\(\?!.*\(\?!/        // Nested lookbehinds
         ];
         
         if (dangerousPatterns.some(dangerous => dangerous.test(pattern))) {
@@ -523,7 +521,7 @@ export default class TableOfContentsPlugin extends Plugin {
     }
     
 
-    private async insertOrUpdateTOC(content: string, toc: string, file: TFile): Promise<string> {
+    private insertOrUpdateTOC(content: string, toc: string, file: TFile): string {
         const { frontmatter, contentWithoutFrontmatter } = this.frontmatterManager.parseFrontmatter(content);
         
         // Update frontmatter with TOC metadata
@@ -718,10 +716,10 @@ class TOCSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: 'Table of Contents Settings' });
+        new Setting(containerEl).setName('Table of contents settings').setHeading();
 
         new Setting(containerEl)
-            .setName('TOC title')
+            .setName('Table of contents title')
             .setDesc('The title to display above the table of contents')
             .addText(text => text
                 .setPlaceholder('Table of Contents')
@@ -755,7 +753,7 @@ class TOCSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Include links')
-            .setDesc('Make TOC items clickable links to headings')
+            .setDesc('Make table of contents items clickable links to headings')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.includeLinks)
                 .onChange(async (value) => {
@@ -779,8 +777,8 @@ class TOCSettingTab extends PluginSettingTab {
             });
 
         new Setting(containerEl)
-            .setName('Auto-update TOC')
-            .setDesc('Automatically update existing TOCs when the document changes')
+            .setName('Auto-update table of contents')
+            .setDesc('Automatically update existing table of contents when the document changes')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.updateOnSave)
                 .onChange(async (value) => {
@@ -792,15 +790,15 @@ class TOCSettingTab extends PluginSettingTab {
 
 
         // Usage information
-        containerEl.createEl('h3', { text: 'Usage' });
+        new Setting(containerEl).setName('Usage').setHeading();
         containerEl.createEl('p', { 
-            text: 'Use the command "Generate table of contents" or click the ribbon icon to insert a TOC at the optimal position (top of document or after the last H1 heading). ' +
-                  'The TOC is tracked using frontmatter metadata for clean, invisible state management.'
+            text: 'Use the command "Generate table of contents" or click the ribbon icon to insert a table of contents at the optimal position (top of document or after the last H1 heading). ' +
+                  'The table of contents is tracked using frontmatter metadata for clean, invisible state management.'
         });
         
-        containerEl.createEl('p', { 
-            text: 'To manually update an existing TOC, simply run the command again. ' +
-                  'With auto-update enabled, the TOC will refresh automatically as you edit.',
+        containerEl.createEl('p', {
+            text: 'To manually update an existing table of contents, simply run the command again. ' +
+                  'With auto-update enabled, the table of contents will refresh automatically as you edit.',
             cls: 'setting-item-description'
         });
     }
@@ -868,7 +866,7 @@ class HeadingParser {
             if (!cache?.headings) return [];
 
             // Return all headings - TOC exclusion will be handled by content parsing
-            return cache.headings.map((h: any) => ({
+            return cache.headings.map((h) => ({
                 level: h.level,
                 text: h.heading,
                 line: h.position.start.line
@@ -883,7 +881,7 @@ class HeadingParser {
 // New service classes for enhanced functionality
 
 class FrontmatterManager {
-    parseFrontmatter(content: string): { frontmatter: Record<string, any>, contentWithoutFrontmatter: string } {
+    parseFrontmatter(content: string): { frontmatter: Record<string, unknown>, contentWithoutFrontmatter: string } {
         const frontmatterMatch = FRONTMATTER_PATTERN.exec(content);
         
         if (!frontmatterMatch) {
@@ -896,7 +894,7 @@ class FrontmatterManager {
         
         try {
             // Simple YAML parser for basic key-value pairs
-            const frontmatter: Record<string, any> = {};
+            const frontmatter: Record<string, unknown> = {};
             const lines = (frontmatterText || '').split('\n');
             
             for (const line of lines) {
@@ -930,7 +928,7 @@ class FrontmatterManager {
         }
     }
     
-    buildContentWithFrontmatter(frontmatter: Record<string, any>, content: string): string {
+    buildContentWithFrontmatter(frontmatter: Record<string, unknown>, content: string): string {
         if (Object.keys(frontmatter).length === 0) {
             return content;
         }
