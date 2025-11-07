@@ -432,7 +432,7 @@ export default class TableOfContentsPlugin extends Plugin {
         return TOC_CONTENT_PATTERNS.some(pattern => pattern.test(trimmed));
     }
 
-    private static findTOCSection(lines: string[], startIndex: number = 0): { start: number, end: number } | null {
+    private static findTOCSection(lines: string[], startIndex = 0): { start: number, end: number } | null {
         // Look for H2 heading followed by TOC-like content
         for (let i = startIndex; i < lines.length; i++) {
             const line = lines[i]?.trim() || '';
