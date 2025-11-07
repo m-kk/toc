@@ -102,7 +102,7 @@ export default class TableOfContentsPlugin extends Plugin {
         // Add debug command to help troubleshoot TOC issues
         this.addCommand({
             id: 'debug-toc-markers',
-            name: 'Debug TOC metadata',
+            name: 'Debug table of contents metadata',
             callback: () => {
                 this.debugTOCMarkers();
             }
@@ -730,7 +730,7 @@ class TOCSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Exclude H1 headings')
+            .setName('Exclude level 1 headings')
             .setDesc('Skip level 1 headings when generating the table of contents')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.excludeH1)
