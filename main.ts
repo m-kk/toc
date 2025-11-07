@@ -109,7 +109,7 @@ export default class TableOfContentsPlugin extends Plugin {
         });
 
         // Add ribbon icon
-        this.addRibbonIcon('list', 'Generate TOC', () => {
+        this.addRibbonIcon('list', 'Generate table of contents', () => {
             const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
             if (activeView) {
                 void this.generateTableOfContents(activeView.editor, activeView);
@@ -720,9 +720,9 @@ class TOCSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Table of contents title')
-            .setDesc('The title to display above the Table of Contents')
+            .setDesc('The title to display above the table of contents')
             .addText(text => text
-                .setPlaceholder('Table of Contents')
+                .setPlaceholder('Table of contents')
                 .setValue(this.plugin.settings.tocTitle)
                 .onChange(async (value) => {
                     this.plugin.settings.tocTitle = value;
@@ -731,7 +731,7 @@ class TOCSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Exclude H1 headings')
-            .setDesc('Skip level 1 headings when generating the Table of Contents')
+            .setDesc('Skip level 1 headings when generating the table of contents')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.excludeH1)
                 .onChange(async (value) => {
@@ -753,7 +753,7 @@ class TOCSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Include links')
-            .setDesc('Make Table of Contents items clickable links to headings')
+            .setDesc('Make table of contents items clickable links to headings')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.includeLinks)
                 .onChange(async (value) => {
@@ -777,8 +777,8 @@ class TOCSettingTab extends PluginSettingTab {
             });
 
         new Setting(containerEl)
-            .setName('Auto-update Table of Contents')
-            .setDesc('Automatically update existing Table of Contents when the document changes')
+            .setName('Auto-update table of contents')
+            .setDesc('Automatically update existing table of contents when the document changes')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.updateOnSave)
                 .onChange(async (value) => {
