@@ -152,7 +152,7 @@ export default class TableOfContentsPlugin extends Plugin {
         try {
             const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
             if (!activeView || !activeView.file) {
-                new Notice('No active markdown view for debugging');
+                new Notice('No active Markdown view for debugging');
                 return;
             }
             
@@ -169,7 +169,7 @@ export default class TableOfContentsPlugin extends Plugin {
                 console.debug('Last Update:', tocMetadata.lastUpdate);
             }
 
-            new Notice('Table of contents debug info logged to console');
+            new Notice('Debug info logged to console');
         } catch (error) {
             console.error('Error in debug method:', error);
             new Notice('Debug failed - check console for details');
@@ -716,11 +716,11 @@ class TOCSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        new Setting(containerEl).setName('Table of contents settings').setHeading();
+        new Setting(containerEl).setName('Table of contents').setHeading();
 
         new Setting(containerEl)
             .setName('Table of contents title')
-            .setDesc('The title to display above the table of contents')
+            .setDesc('The title to display above the Table of Contents')
             .addText(text => text
                 .setPlaceholder('Table of Contents')
                 .setValue(this.plugin.settings.tocTitle)
@@ -731,7 +731,7 @@ class TOCSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Exclude H1 headings')
-            .setDesc('Skip level 1 headings when generating the TOC')
+            .setDesc('Skip level 1 headings when generating the Table of Contents')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.excludeH1)
                 .onChange(async (value) => {
@@ -753,7 +753,7 @@ class TOCSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Include links')
-            .setDesc('Make table of contents items clickable links to headings')
+            .setDesc('Make Table of Contents items clickable links to headings')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.includeLinks)
                 .onChange(async (value) => {
@@ -777,8 +777,8 @@ class TOCSettingTab extends PluginSettingTab {
             });
 
         new Setting(containerEl)
-            .setName('Auto-update table of contents')
-            .setDesc('Automatically update existing table of contents when the document changes')
+            .setName('Auto-update Table of Contents')
+            .setDesc('Automatically update existing Table of Contents when the document changes')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.updateOnSave)
                 .onChange(async (value) => {
@@ -936,12 +936,12 @@ class FrontmatterManager {
         const frontmatterLines = ['---'];
         
         for (const [key, value] of Object.entries(frontmatter)) {
-            if (typeof value === 'object') {
+            if (typeof value === 'object' && value !== null) {
                 frontmatterLines.push(`${key}: ${JSON.stringify(value)}`);
             } else if (typeof value === 'string' && (value.includes(':') || value.includes(' '))) {
                 frontmatterLines.push(`${key}: "${value}"`);
             } else {
-                frontmatterLines.push(`${key}: ${value}`);
+                frontmatterLines.push(`${key}: ${String(value)}`);
             }
         }
         
