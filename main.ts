@@ -10,6 +10,7 @@ import {
     TFile,
     MetadataCache,
     stripHeadingForLink,
+    debounce,
 } from 'obsidian';
 
 // TOC configuration
@@ -69,22 +70,35 @@ interface Heading {
 
 export default class TableOfContentsPlugin extends Plugin {
     settings!: TOCSettings;
-    private updateTimer: number | null = null;
     private isGenerating = false;
     private tocGenerator!: TOCGenerator;
     private headingParser!: HeadingParser;
     private frontmatterManager!: FrontmatterManager;
     private editorExtension!: TOCEditorExtension;
+    private debouncedAutoUpdate!: (editor: Editor, view: MarkdownView) => void;
 
     async onload() {
         await this.loadSettings();
-        
+
         // Initialize services
         this.tocGenerator = new TOCGenerator(this.settings);
         this.headingParser = new HeadingParser();
         this.frontmatterManager = new FrontmatterManager();
         this.editorExtension = new TOCEditorExtension(this.app, this.settings);
-        
+
+        // Initialize debounced auto-update function
+        this.debouncedAutoUpdate = debounce(
+            async (editor: Editor, view: MarkdownView) => {
+                try {
+                    await this.autoUpdateTOC(editor, view);
+                } catch (error) {
+                    console.error('Error in auto-update:', error);
+                }
+            },
+            DEBOUNCE_DELAY,
+            true
+        );
+
         // Register editor extension for live preview enhancements
         this.registerEditorExtension(this.editorExtension.getExtension());
 
@@ -127,15 +141,7 @@ export default class TableOfContentsPlugin extends Plugin {
     }
 
     onunload() {
-        this.cleanupEventHandlers();
-    }
-
-    private cleanupEventHandlers() {
-        if (this.updateTimer) {
-            clearTimeout(this.updateTimer);
-            this.updateTimer = null;
-        }
-        
+        // Cleanup handled by Obsidian's event system
     }
 
 
@@ -155,10 +161,9 @@ export default class TableOfContentsPlugin extends Plugin {
                 new Notice('No active Markdown view for debugging');
                 return;
             }
-            
-            const content = activeView.editor.getValue();
-            const { frontmatter } = this.frontmatterManager.parseFrontmatter(content);
-            const tocMetadata = frontmatter[TOC_CONFIG.FRONTMATTER_KEY] as TOCMetadata | undefined;
+
+            const cache = this.app.metadataCache.getFileCache(activeView.file);
+            const tocMetadata = cache?.frontmatter?.[TOC_CONFIG.FRONTMATTER_KEY] as TOCMetadata | undefined;
 
             console.debug('=== TOC Debug Info ===');
             console.debug('File:', activeView.file.name);
@@ -195,14 +200,10 @@ export default class TableOfContentsPlugin extends Plugin {
         // Re-register auto-update based on settings
         if (this.settings.updateOnSave) {
             this.registerAutoUpdate();
-        } else {
-            this.cleanupEventHandlers();
         }
     }
 
     private registerAutoUpdate() {
-        this.cleanupEventHandlers();
-        
         this.registerEvent(
             this.app.vault.on('modify', (file) => {
                 const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -213,50 +214,13 @@ export default class TableOfContentsPlugin extends Plugin {
         );
     }
 
-    private debouncedAutoUpdate = this.debounce(async (editor: Editor, view: MarkdownView) => {
-        try {
-            await this.autoUpdateTOC(editor, view);
-        } catch (error) {
-            console.error('Error in auto-update:', error);
-        }
-    }, DEBOUNCE_DELAY);
-
-    private debounce<T extends unknown[]>(func: (...args: T) => Promise<void>, wait: number) {
-        return (...args: T) => {
-            if (this.updateTimer) {
-                clearTimeout(this.updateTimer);
-            }
-
-            this.updateTimer = window.setTimeout(() => {
-                func(...args).catch(error => {
-                    console.error('Error in debounced function:', error);
-                }).finally(() => {
-                    this.updateTimer = null;
-                });
-            }, wait);
-        };
-    }
-    
-    private throttle<T extends unknown[]>(func: (...args: T) => void, limit: number) {
-        let inThrottle: boolean;
-        return (...args: T) => {
-            if (!inThrottle) {
-                func(...args);
-                inThrottle = true;
-                window.setTimeout(() => inThrottle = false, limit);
-            }
-        };
-    }
-
     private async autoUpdateTOC(editor: Editor, view: MarkdownView) {
         if (!editor || !view || !view.file) return;
-        
-        const content = editor.getValue();
-        
+
         // Only auto-update if TOC already exists
-        const { frontmatter } = this.frontmatterManager.parseFrontmatter(content);
-        const hasTOC = frontmatter[TOC_CONFIG.FRONTMATTER_KEY];
-        
+        const cache = this.app.metadataCache.getFileCache(view.file);
+        const hasTOC = cache?.frontmatter?.[TOC_CONFIG.FRONTMATTER_KEY];
+
         if (hasTOC) {
             await this.generateTableOfContents(editor, view, true);
         }
@@ -300,20 +264,17 @@ export default class TableOfContentsPlugin extends Plugin {
             }
 
             const toc = this.createTOC(filteredHeadings);
-            const newContent = this.insertOrUpdateTOC(content, toc, file);
-            
-            if (newContent !== content) {
-                if (isAutoUpdate) {
-                    // For auto-updates, use editor operations to avoid external modification popup
+
+            if (isAutoUpdate) {
+                // For auto-updates, use editor operations to avoid external modification popup
+                const newContent = this.insertOrUpdateTOC(content, toc, file);
+                if (newContent !== content) {
                     this.updateEditorContent(editor, newContent);
-                } else {
-                    // For manual updates, use vault.modify
-                    await this.app.vault.modify(file, newContent);
                 }
-                
-                if (!isAutoUpdate) {
-                    new Notice('Table of contents updated');
-                }
+            } else {
+                // For manual updates, use vault.process with atomic frontmatter updates
+                await this.insertOrUpdateTOCWithProcess(file, toc);
+                new Notice('Table of contents updated');
             }
         } catch (error) {
             console.error('Error generating TOC:', error);
@@ -427,6 +388,29 @@ export default class TableOfContentsPlugin extends Plugin {
         return this.tocGenerator.generate(headings);
     }
 
+    private async insertOrUpdateTOCWithProcess(file: TFile, toc: string): Promise<void> {
+        // Update frontmatter using FileManager.processFrontMatter
+        await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+            frontmatter[TOC_CONFIG.FRONTMATTER_KEY] = {
+                generated: true,
+                lastUpdate: new Date().toISOString()
+            };
+        });
+
+        // Update content using Vault.process
+        await this.app.vault.process(file, (content) => {
+            // Remove existing TOC if present
+            const contentWithoutTOC = this.removeTOCFromContent(content);
+
+            // Get frontmatter position from cache
+            const cache = this.app.metadataCache.getFileCache(file);
+            const frontmatterEnd = cache?.frontmatterPosition?.end?.line ?? -1;
+
+            // Insert new TOC at optimal position
+            return this.insertTOCAtOptimalPositionWithCache(contentWithoutTOC, toc, file, frontmatterEnd);
+        });
+    }
+
     private static isTOCContentLine(line: string): boolean {
         const trimmed = line.trim();
         return TOC_CONTENT_PATTERNS.some(pattern => pattern.test(trimmed));
@@ -490,28 +474,54 @@ export default class TableOfContentsPlugin extends Plugin {
     
     private insertTOCAtOptimalPosition(content: string, toc: string, file: TFile, originalContent: string): string {
         const lines = content.split('\n');
-        
+
         // Use Obsidian's metadata cache to get actual H1 headings (not code blocks)
         const cache = this.app.metadataCache.getFileCache(file);
         const h1Headings = cache?.headings?.filter(h => h.level === 1) || [];
-        
+
         // If no H1s exist, insert at position 0
         if (h1Headings.length === 0) {
             return ['', toc, '', ...lines].join('\n');
         }
-        
-        // Calculate frontmatter offset efficiently
-        const frontmatterMatch = FRONTMATTER_PATTERN.exec(originalContent);
-        const frontmatterOffset = frontmatterMatch ? (frontmatterMatch[0] || '').split('\n').length - 1 : 0;
-        
+
+        // Calculate frontmatter offset efficiently using cache
+        const frontmatterEnd = cache?.frontmatterPosition?.end?.line ?? -1;
+        const frontmatterOffset = frontmatterEnd >= 0 ? frontmatterEnd + 1 : 0;
+
         // Find the last H1 heading line and adjust for frontmatter offset
         const lastH1LineInOriginal = Math.max(...h1Headings.map(h => h.position.start.line));
         const lastH1LineInContent = lastH1LineInOriginal - frontmatterOffset;
-        
+
         // Insert TOC after the H1 heading
         const beforeLastH1 = lines.slice(0, lastH1LineInContent + 1);
         const afterLastH1 = lines.slice(lastH1LineInContent + 1);
-        
+
+        return [...beforeLastH1, '', toc, '', ...afterLastH1].join('\n');
+    }
+
+    private insertTOCAtOptimalPositionWithCache(content: string, toc: string, file: TFile, frontmatterEndLine: number): string {
+        const lines = content.split('\n');
+
+        // Use Obsidian's metadata cache to get actual H1 headings (not code blocks)
+        const cache = this.app.metadataCache.getFileCache(file);
+        const h1Headings = cache?.headings?.filter(h => h.level === 1) || [];
+
+        // If no H1s exist, insert at position 0 (after frontmatter)
+        if (h1Headings.length === 0) {
+            return ['', toc, '', ...lines].join('\n');
+        }
+
+        // Calculate frontmatter offset using provided cache data
+        const frontmatterOffset = frontmatterEndLine >= 0 ? frontmatterEndLine + 1 : 0;
+
+        // Find the last H1 heading line and adjust for frontmatter offset
+        const lastH1LineInOriginal = Math.max(...h1Headings.map(h => h.position.start.line));
+        const lastH1LineInContent = lastH1LineInOriginal - frontmatterOffset;
+
+        // Insert TOC after the H1 heading
+        const beforeLastH1 = lines.slice(0, lastH1LineInContent + 1);
+        const afterLastH1 = lines.slice(lastH1LineInContent + 1);
+
         return [...beforeLastH1, '', toc, '', ...afterLastH1].join('\n');
     }
     
@@ -623,83 +633,8 @@ export default class TableOfContentsPlugin extends Plugin {
     private findTOCBoundariesInContent(content: string): { startLine: number, endLine: number } | null {
         const lines = content.split('\n');
         const tocSection = TableOfContentsPlugin.findTOCSection(lines);
-        
-        return tocSection ? { startLine: tocSection.start, endLine: tocSection.end } : null;
-    }
 
-    private calculateTOCLineOffset(originalContent: string, newContent: string): number {
-        const originalLines = originalContent.split('\n');
-        const newLines = newContent.split('\n');
-        
-        // Find TOC sections in both versions
-        const originalTOCEnd = this.findTOCEnd(originalLines);
-        const newTOCEnd = this.findTOCEnd(newLines);
-        
-        // The offset is the difference in where content after TOC starts
-        return newTOCEnd - originalTOCEnd;
-    }
-    
-    private findTOCEnd(lines: string[]): number {
-        // Skip frontmatter first
-        let index = 0;
-        if (lines.length > 0 && lines[0] === '---') {
-            index = 1;
-            while (index < lines.length && lines[index] !== '---') {
-                index++;
-            }
-            if (index < lines.length && lines[index] === '---') {
-                index++; // Skip closing ---
-            }
-        }
-        
-        // Use optimized TOC detection
-        const tocSection = TableOfContentsPlugin.findTOCSection(lines, index);
-        
-        return tocSection ? tocSection.end + 1 : index;
-    }
-    
-    private findContentStart(lines: string[]): number {
-        let index = 0;
-        
-        // Skip frontmatter
-        if (lines.length > 0 && lines[0] === '---') {
-            index = 1;
-            while (index < lines.length && lines[index] !== '---') {
-                index++;
-            }
-            if (index < lines.length && lines[index] === '---') {
-                index++; // Skip closing ---
-            }
-        }
-        
-        // Skip empty lines after frontmatter
-        while (index < lines.length && lines[index]?.trim() === '') {
-            index++;
-        }
-        
-        // Skip TOC if present
-        if (index < lines.length && lines[index]?.startsWith(`## ${this.settings.tocTitle}`)) {
-            // Skip TOC section
-            index++; // Skip TOC title
-            while (index < lines.length) {
-                const line = lines[index];
-                if (!line) {
-                    index++;
-                    continue;
-                }
-                if (line.trim() === '' || line.startsWith('- ') || line.startsWith('  - ') || line === '*No headings found*') {
-                    index++;
-                } else if (line.startsWith('#')) {
-                    // Found next heading, this is where content starts
-                    break;
-                } else {
-                    // Found non-TOC content
-                    break;
-                }
-            }
-        }
-        
-        return index;
+        return tocSection ? { startLine: tocSection.start, endLine: tocSection.end } : null;
     }
 }
 
@@ -715,8 +650,6 @@ class TOCSettingTab extends PluginSettingTab {
     display(): void {
         const { containerEl } = this;
         containerEl.empty();
-
-        new Setting(containerEl).setName('Table of contents').setHeading();
 
         new Setting(containerEl)
             .setName('Table of contents title')
