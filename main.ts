@@ -32,8 +32,6 @@ const TOC_CONTENT_PATTERNS = [
     /^ {2}-\s+[^[].+$/               // Indented plain text
 ] as const;
 
-const FRONTMATTER_PATTERN = /^---\s*\n([\s\S]*?)\n---\s*\n/;
-
 interface TOCSettings {
     tocTitle: string;
     excludeH1: boolean;
@@ -532,22 +530,34 @@ export default class TableOfContentsPlugin extends Plugin {
     
 
     private insertOrUpdateTOC(content: string, toc: string, file: TFile): string {
-        const { frontmatter, contentWithoutFrontmatter } = this.frontmatterManager.parseFrontmatter(content);
-        
+        // Use Obsidian's metadata cache to read frontmatter
+        const cache = this.app.metadataCache.getFileCache(file);
+        const existingFrontmatter = cache?.frontmatter || {};
+
+        // Create a copy to avoid mutating cached data
+        const frontmatter = { ...existingFrontmatter };
+
         // Update frontmatter with TOC metadata
         const tocMetadata: TOCMetadata = {
             generated: true,
             lastUpdate: new Date().toISOString()
         };
-        
+
         frontmatter[TOC_CONFIG.FRONTMATTER_KEY] = tocMetadata;
-        
+
+        // Get content without frontmatter using frontmatterPosition from cache
+        const frontmatterEnd = cache?.frontmatterPosition?.end?.line ?? -1;
+        const lines = content.split('\n');
+        const contentWithoutFrontmatter = frontmatterEnd >= 0
+            ? lines.slice(frontmatterEnd + 1).join('\n')
+            : content;
+
         // Remove existing TOC if present
         const contentWithoutTOC = this.removeTOCFromContent(contentWithoutFrontmatter);
-        
+
         // Insert new TOC at optimal position (position 0 or after last H1)
         const contentWithNewTOC = this.insertTOCAtOptimalPosition(contentWithoutTOC, toc, file, content);
-        
+
         // Rebuild content with updated frontmatter
         return this.frontmatterManager.buildContentWithFrontmatter(frontmatter, contentWithNewTOC);
     }
@@ -722,13 +732,12 @@ class TOCSettingTab extends PluginSettingTab {
 
 
 
-        // Usage information
-        new Setting(containerEl).setName('Usage').setHeading();
-        containerEl.createEl('p', { 
+        // Usage information (no heading per Obsidian guidelines)
+        containerEl.createEl('p', {
             text: 'Use the command "Generate table of contents" or click the ribbon icon to insert a table of contents at the optimal position (top of document or after the last H1 heading). ' +
                   'The table of contents is tracked using frontmatter metadata for clean, invisible state management.'
         });
-        
+
         containerEl.createEl('p', {
             text: 'To manually update an existing table of contents, simply run the command again. ' +
                   'With auto-update enabled, the table of contents will refresh automatically as you edit.',
@@ -814,53 +823,6 @@ class HeadingParser {
 // New service classes for enhanced functionality
 
 class FrontmatterManager {
-    parseFrontmatter(content: string): { frontmatter: Record<string, unknown>, contentWithoutFrontmatter: string } {
-        const frontmatterMatch = FRONTMATTER_PATTERN.exec(content);
-        
-        if (!frontmatterMatch) {
-            return { frontmatter: {}, contentWithoutFrontmatter: content };
-        }
-        
-        const frontmatterText = frontmatterMatch[1];
-        const matchLength = frontmatterMatch[0]?.length || 0;
-        const contentWithoutFrontmatter = content.substring(matchLength);
-        
-        try {
-            // Simple YAML parser for basic key-value pairs
-            const frontmatter: Record<string, unknown> = {};
-            const lines = (frontmatterText || '').split('\n');
-            
-            for (const line of lines) {
-                const colonIndex = line.indexOf(':');
-                if (colonIndex > 0) {
-                    const key = line.substring(0, colonIndex).trim();
-                    const value = line.substring(colonIndex + 1).trim();
-                    
-                    // Basic value parsing
-                    if (value === 'true') frontmatter[key] = true;
-                    else if (value === 'false') frontmatter[key] = false;
-                    else if (/^\d+$/.test(value)) frontmatter[key] = parseInt(value);
-                    else if (value.startsWith('"') && value.endsWith('"')) {
-                        frontmatter[key] = value.slice(1, -1);
-                    } else if (value.startsWith('{') || value.startsWith('[')) {
-                        try {
-                            frontmatter[key] = JSON.parse(value);
-                        } catch {
-                            frontmatter[key] = value;
-                        }
-                    } else {
-                        frontmatter[key] = value;
-                    }
-                }
-            }
-            
-            return { frontmatter, contentWithoutFrontmatter };
-        } catch (error) {
-            console.error('Error parsing frontmatter:', error);
-            return { frontmatter: {}, contentWithoutFrontmatter: content };
-        }
-    }
-    
     buildContentWithFrontmatter(frontmatter: Record<string, unknown>, content: string): string {
         if (Object.keys(frontmatter).length === 0) {
             return content;

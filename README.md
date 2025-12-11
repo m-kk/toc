@@ -2,6 +2,17 @@
 
 A modern Obsidian plugin that generates clean, trackable table of contents using frontmatter metadata. Creates invisible TOC markers without cluttering your source view, with advanced configuration options and automatic updates.
 
+## Why This Plugin?
+
+This plugin differs from other TOC solutions in several key ways:
+
+- **Frontmatter-Based Tracking**: Uses YAML frontmatter instead of HTML comments for TOC state management, keeping your source view clean and readable
+- **No Visible Markers**: Unlike plugins that insert HTML comments (`<!-- TOC -->`) visible in source mode, this plugin's TOC tracking is completely invisible
+- **Metadata Cache Integration**: Leverages Obsidian's built-in metadata cache system for efficient heading detection and frontmatter management
+- **Smart Positioning**: Automatically places TOC at the document start or after the last H1 heading, intelligently adapting to your document structure
+- **Duplicate Heading Support**: Correctly handles duplicate headings using Obsidian's native linking format with space separators
+- **Security Hardened**: Includes ReDoS protection for user-provided regex patterns to prevent performance issues
+
 <a href="https://www.buymeacoffee.com/mattkk" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## Features
