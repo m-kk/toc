@@ -6,5 +6,6 @@
     "description": "Generate a table of contents for your notes.",
     "author": "Matt Kaili",
     "authorUrl": "https://github.com/m-kk",
-    "isDesktopOnly": false
+    "isDesktopOnly": false,
+    "fundingUrl": "https://buymeacoffee.com/mattkk"
 }
