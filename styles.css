@@ -7,3 +7,11 @@ All TOC visibility is now handled through frontmatter metadata.
 Note: This plugin generates standard markdown content (headings and lists).
 Styling is minimal to avoid conflicts with themes.
 */
+.toc-pattern-errors {
+    color: var(--text-error);
+    font-size: var(--font-ui-smaller);
+}
+
+.toc-pattern-errors:empty {
+    display: none;
+}
