@@ -71,7 +71,7 @@ export default class TableOfContentsPlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<TOCSettings> | null);
     }
 
     async saveSettings() {
@@ -153,7 +153,7 @@ export default class TableOfContentsPlugin extends Plugin {
                 }
             } else {
                 await this.app.vault.process(file, (content) => replaceTOC(content, toc, isTitle));
-                await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+                await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
                     frontmatter[TOC_FRONTMATTER_KEY] = { generated: true };
                 });
                 new Notice('Table of contents updated');
@@ -188,7 +188,7 @@ export default class TableOfContentsPlugin extends Plugin {
                 await this.app.vault.process(file, (content) => removeTOCSection(content, isTitle));
             }
             if (hasMetadata) {
-                await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+                await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
                     delete frontmatter[TOC_FRONTMATTER_KEY];
                 });
             }
@@ -301,7 +301,6 @@ class TOCSettingTab extends PluginSettingTab {
             .addSlider(slider => slider
                 .setLimits(1, 6, 1)
                 .setValue(this.plugin.settings.maxDepth)
-                .setDynamicTooltip()
                 .onChange(async (value) => {
                     this.plugin.settings.maxDepth = value;
                     await this.plugin.saveSettings();
